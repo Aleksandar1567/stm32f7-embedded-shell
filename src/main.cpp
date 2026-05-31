@@ -1,6 +1,7 @@
 #include "stm32f7xx_hal.h"
 #include "Led.hpp"
 #include "Uart.hpp"
+#include "EthernetIF.hpp"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -92,6 +93,13 @@ int main(void)
     ledBlue.init();
     ledRed.init();
     dbg.println("[main] LEDs init OK");
+
+    if (ETH_Init()) {
+        dbg.println("[main] ETH init OK");
+        dbg.printf("[main] link: %s\r\n", ETH_IsLinkUp() ? "UP" : "DOWN");
+    } else {
+        dbg.println("[main] ETH init FAILED");
+    }
 
     BaseType_t r1 = xTaskCreate(greenTask, "Green", 128, nullptr, 1, nullptr);
     BaseType_t r2 = xTaskCreate(blueTask,  "Blue",  128, nullptr, 1, nullptr);
