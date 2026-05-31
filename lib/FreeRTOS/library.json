@@ -1,0 +1,10 @@
+{
+  "name": "FreeRTOS",
+  "version": "10.3.1",
+  "build": {
+    "flags": [
+      "-Iinclude",
+      "-Isrc"
+    ]
+  }
+}

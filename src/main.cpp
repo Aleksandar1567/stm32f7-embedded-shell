@@ -1,23 +1,26 @@
 #include "stm32f7xx_hal.h"
-#include "stm32f7xx_hal_flash_ex.h"
 #include "Led.hpp"
 #include "Uart.hpp"
-#include "Filesystem.hpp"
-#include "Logger.hpp"
-#include "Shell.hpp"
+#include "FreeRTOS.h"
+#include "task.h"
 
-extern "C" void SysTick_Handler(void) { HAL_IncTick(); }
+// Ukljuci/iskljuci logovanje unutar taskova (0 = iskljuceno, nema utjecaja na RAM/Flash)
+#define TASK_LOG_ENABLED 0
 
-// Forward declaration — uart is defined below as a global
-extern Uart uart;
+#if TASK_LOG_ENABLED
+  #define TASK_LOG(msg)        dbg.println(msg)
+  #define TASK_LOGF(fmt, ...)  dbg.printf(fmt, ##__VA_ARGS__)
+#else
+  #define TASK_LOG(msg)        ((void)0)
+  #define TASK_LOGF(fmt, ...)  ((void)0)
+#endif
 
-extern "C" void HardFault_Handler(void) {
-    uart.println("*** HARDFAULT ***");
-    while (1) {
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
-        HAL_Delay(100);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
-        HAL_Delay(100);
+extern "C" void xPortSysTickHandler(void);
+
+extern "C" void SysTick_Handler(void) {
+    HAL_IncTick();
+    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) {
+        xPortSysTickHandler();
     }
 }
 
@@ -45,31 +48,36 @@ static void SystemClock_Config(void)
 }
 
 // Global objects
+Uart dbg(USART3, 115200);
 Led  ledGreen(GPIOB, GPIO_PIN_0);
 Led  ledBlue (GPIOB, GPIO_PIN_7);
 Led  ledRed  (GPIOB, GPIO_PIN_14);
-Uart uart(USART3, 115200);
-Filesystem fs;
-bool fs_mounted = false;
 
-static bool fs_init(void)
-{
-    Logger::debug("Erasing flash sectors 6+7...");
-    HAL_FLASH_Unlock();
-    FLASH_EraseInitTypeDef erase = {0};
-    erase.TypeErase    = FLASH_TYPEERASE_SECTORS;
-    erase.Sector       = FLASH_SECTOR_6;
-    erase.NbSectors    = 2;
-    erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-    uint32_t error_code = 0;
-    if (HAL_FLASHEx_Erase(&erase, &error_code) != HAL_OK) {
-        Logger::error("Flash erase failed, error_code=%lu", (unsigned long)error_code);
-        HAL_FLASH_Lock();
-        return false;
+static void greenTask(void*) {
+    TASK_LOG("[greenTask] started");
+    for (;;) {
+        ledGreen.toggle();
+        TASK_LOG("[greenTask] toggle");
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
-    HAL_FLASH_Lock();
-    Logger::debug("Flash erase OK");
-    return fs.mount();
+}
+
+static void blueTask(void*) {
+    TASK_LOG("[blueTask] started");
+    for (;;) {
+        ledBlue.toggle();
+        TASK_LOG("[blueTask] toggle");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+
+static void redTask(void*) {
+    TASK_LOG("[redTask] started");
+    for (;;) {
+        ledRed.toggle();
+        TASK_LOG("[redTask] toggle");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
 
 int main(void)
@@ -77,42 +85,22 @@ int main(void)
     HAL_Init();
     SystemClock_Config();
 
+    dbg.init();
+    dbg.println("[main] boot OK");
+
     ledGreen.init();
     ledBlue.init();
     ledRed.init();
+    dbg.println("[main] LEDs init OK");
 
-    uart.init();
-    Logger::init();
+    BaseType_t r1 = xTaskCreate(greenTask, "Green", 128, nullptr, 1, nullptr);
+    BaseType_t r2 = xTaskCreate(blueTask,  "Blue",  128, nullptr, 1, nullptr);
+    BaseType_t r3 = xTaskCreate(redTask,   "Red",   128, nullptr, 1, nullptr);
 
-    Logger::info("System starting");
-    fs_mounted = fs_init();
+    dbg.printf("[main] tasks created: green=%d blue=%d red=%d\r\n", r1, r2, r3);
 
-    if (fs_mounted) {
-        Logger::info("FS: mounted OK");
-    } else {
-        Logger::error("FS: mount FAILED");
-        ledRed.on();
-    }
-
-    // Boot complete — blink all 3 LEDs 3x
-    for (int i = 0; i < 3; i++) {
-        ledGreen.on(); ledBlue.on(); ledRed.on();
-        HAL_Delay(150);
-        ledGreen.off(); ledBlue.off(); ledRed.off();
-        HAL_Delay(150);
-    }
-
-    uart.println("\r\n=== LittleFS Shell ===");
-    uart.println("Type 'help' for commands.");
-
-    char line[128];
-    while (1) {
-        uart.print("\r\n> ");
-        int n = uart.readline(line, sizeof(line));
-        if (n > 0) {
-            uart.print("\r\n");
-            parse_cmd(line);
-        }
-        ledGreen.toggle();
-    }
+    dbg.println("[main] starting scheduler");
+    vTaskStartScheduler();
+    dbg.println("[main] ERROR: scheduler returned!");
+    for (;;);
 }
