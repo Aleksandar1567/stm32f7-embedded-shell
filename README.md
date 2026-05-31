@@ -1,55 +1,107 @@
 # stm32f7-littlefs-shell
 
-Bare-metal firmware for the STM32F7 series that exposes a simple interactive shell over UART, backed by LittleFS for persistent file storage on internal flash.
+Bare-metal firmware for the STM32F767ZI (NUCLEO-F767ZI) that exposes an interactive shell over UART, backed by LittleFS for persistent file storage on internal flash. Built with PlatformIO.
 
 ## Features
 
-- Interactive UART shell at 115200 baud — works with any serial terminal (PuTTY, minicom, screen)
-- LittleFS filesystem mounted on internal flash with wear levelling and power-loss resilience
-- Commands: `ls`, `read`, `write`, `rm`, `help`
-- RGB LED status indicators (green heartbeat, red on fatal error)
-- Runs at 216 MHz via HSI PLL with Over-Drive enabled
+- Interactive UART shell at 115200 baud — works with any serial terminal
+- LittleFS filesystem mounted on internal flash sectors 6 & 7 with wear levelling and power-loss resilience
+- Shell commands: `ls`, `read`, `write`, `rm`, `help`, `logs`, `logs clear`
+- Non-blocking circular-buffer logger (4 KB) with `[ERROR]` / `[WARN]` / `[INFO]` / `[DEBUG]` levels and HAL timestamps
+- RGB LED status indicators: green heartbeat blink, red on fatal error / mount failure, all three blink 3× on boot
+- HardFault handler that prints a message and blinks the red LED
+- Runs at 216 MHz via HSI PLL with Over-Drive enabled (FLASH_LATENCY_7)
+- C++17, STM32 HAL framework, LittleFS fetched automatically by PlatformIO
 
 ## Hardware
 
 | Resource | Assignment |
 |---|---|
-| MCU | STM32F7xx |
+| Board | NUCLEO-F767ZI |
+| MCU | STM32F767ZI |
 | UART | USART3 @ 115200 8N1 |
 | LED green | PB0 |
 | LED blue | PB7 |
 | LED red | PB14 |
+| Flash storage | Sectors 6 & 7 (internal flash) |
 
 ## Shell commands
 
 ```
 > help
 Commands:
-  ls
-  read <file>
+  logs              - show all logs
+  logs clear        - clear logs
+  ls                - list files
+  read <file>       - read file
   write <file> <data>
-  rm <file>
+  rm <file>         - remove file
 ```
 
 ## Project structure
 
 ```
-├── Core/
-│   ├── main.cpp          # Entry point, shell loop
-│   ├── Led.hpp/.cpp      # GPIO LED abstraction
-│   ├── Uart.hpp/.cpp     # USART blocking driver
-│   └── Filesystem.hpp/.cpp  # LittleFS wrapper
-└── Drivers/
-    └── ...               # STM32 HAL + LittleFS
+├── include/
+│   ├── Filesystem.hpp   # LittleFS wrapper
+│   ├── Led.hpp          # GPIO LED abstraction
+│   ├── Logger.hpp       # Circular-buffer logger
+│   ├── Shell.hpp        # Command parser
+│   └── Uart.hpp         # USART blocking driver
+├── src/
+│   ├── Filesystem.cpp
+│   ├── Logger.cpp
+│   ├── Shell.cpp
+│   └── main.cpp         # Entry point, clock config, shell loop
+├── platformio.ini
+└── README.md
 ```
 
-## Building
+## PlatformIO setup
 
-Requires STM32CubeIDE or an ARM GCC toolchain with the STM32F7 HAL and LittleFS sources added to the project.
+Install [PlatformIO](https://platformio.org/install) (VS Code extension or CLI). All dependencies (STM32 HAL, LittleFS) are resolved automatically on first build.
 
-1. Clone the repo and open in STM32CubeIDE, or configure your `CMakeLists.txt` / Makefile to include the HAL and LittleFS sources.
-2. Set the target device to your exact STM32F7 variant and adjust flash region parameters in `Filesystem.cpp` if needed.
-3. Build and flash via ST-Link.
+### Build
+
+```bash
+pio run
+```
+
+### Build & flash via ST-Link
+
+```bash
+pio run -t upload
+```
+
+### Open serial monitor (115200 baud)
+
+```bash
+pio device monitor --baud 115200
+```
+
+### Other useful commands
+
+```bash
+# Clean build artifacts
+pio run -t clean
+
+# List detected serial ports
+pio device list
+
+# Build + upload + open monitor in one shot
+pio run -t upload && pio device monitor --baud 115200
+
+# Show verbose build output
+pio run -v
+
+# Check / update platform and library dependencies
+pio pkg update
+```
+
+## Logger
+
+The logger stores messages in a 4 KB circular buffer without blocking the main loop. To see accumulated logs, type `logs` in the shell. To discard them, type `logs clear`.
+
+Log format: `[LEVEL][<ms since boot>] message`
 
 ## License
 
