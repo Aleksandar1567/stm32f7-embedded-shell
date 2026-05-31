@@ -6,10 +6,10 @@ public:
     Led(GPIO_TypeDef *port, uint16_t pin) : port_(port), pin_(pin) {}
 
     void init() {
-        // Clock za GPIOB
+        // Enable GPIO port clock
         if (port_ == GPIOB) __HAL_RCC_GPIOB_CLK_ENABLE();
         if (port_ == GPIOC) __HAL_RCC_GPIOC_CLK_ENABLE();
-        // dodaj po potrebi
+        // Add more ports as needed
 
         GPIO_InitTypeDef g = {0};
         g.Pin   = pin_;

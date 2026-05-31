@@ -1,10 +1,25 @@
 #include "stm32f7xx_hal.h"
+#include "stm32f7xx_hal_flash_ex.h"
 #include "Led.hpp"
 #include "Uart.hpp"
 #include "Filesystem.hpp"
-#include <string.h>
+#include "Logger.hpp"
+#include "Shell.hpp"
 
 extern "C" void SysTick_Handler(void) { HAL_IncTick(); }
+
+// Forward declaration — uart is defined below as a global
+extern Uart uart;
+
+extern "C" void HardFault_Handler(void) {
+    uart.println("*** HARDFAULT ***");
+    while (1) {
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+        HAL_Delay(100);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+        HAL_Delay(100);
+    }
+}
 
 static void SystemClock_Config(void)
 {
@@ -29,50 +44,32 @@ static void SystemClock_Config(void)
     HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_7);
 }
 
-// Globalni objekti
+// Global objects
 Led  ledGreen(GPIOB, GPIO_PIN_0);
 Led  ledBlue (GPIOB, GPIO_PIN_7);
 Led  ledRed  (GPIOB, GPIO_PIN_14);
 Uart uart(USART3, 115200);
 Filesystem fs;
+bool fs_mounted = false;
 
-static void parse_cmd(char *line)
+static bool fs_init(void)
 {
-    char out[512];
-
-    if (strcmp(line, "ls") == 0) {
-        fs.ls(out, sizeof(out));
-        uart.print(out);
-        return;
+    Logger::debug("Erasing flash sectors 6+7...");
+    HAL_FLASH_Unlock();
+    FLASH_EraseInitTypeDef erase = {0};
+    erase.TypeErase    = FLASH_TYPEERASE_SECTORS;
+    erase.Sector       = FLASH_SECTOR_6;
+    erase.NbSectors    = 2;
+    erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+    uint32_t error_code = 0;
+    if (HAL_FLASHEx_Erase(&erase, &error_code) != HAL_OK) {
+        Logger::error("Flash erase failed, error_code=%lu", (unsigned long)error_code);
+        HAL_FLASH_Lock();
+        return false;
     }
-    if (strncmp(line, "read ", 5) == 0) {
-        if (fs.read(line + 5, out, sizeof(out)))
-            uart.println(out);
-        else
-            uart.println("ERR: file not found");
-        return;
-    }
-    if (strncmp(line, "rm ", 3) == 0) {
-        uart.println(fs.remove(line + 3) ? "OK" : "ERR: cannot remove");
-        return;
-    }
-    if (strncmp(line, "write ", 6) == 0) {
-        char *rest  = line + 6;
-        char *space = strchr(rest, ' ');
-        if (!space) { uart.println("Usage: write <file> <data>"); return; }
-        *space = '\0';
-        uart.println(fs.write(rest, space + 1) ? "OK" : "ERR: cannot write");
-        return;
-    }
-    if (strcmp(line, "help") == 0) {
-        uart.println("Commands:");
-        uart.println("  ls");
-        uart.println("  read <file>");
-        uart.println("  write <file> <data>");
-        uart.println("  rm <file>");
-        return;
-    }
-    uart.println("Unknown command. Type 'help'.");
+    HAL_FLASH_Lock();
+    Logger::debug("Flash erase OK");
+    return fs.mount();
 }
 
 int main(void)
@@ -83,16 +80,30 @@ int main(void)
     ledGreen.init();
     ledBlue.init();
     ledRed.init();
+
     uart.init();
+    Logger::init();
+
+    Logger::info("System starting");
+    fs_mounted = fs_init();
+
+    if (fs_mounted) {
+        Logger::info("FS: mounted OK");
+    } else {
+        Logger::error("FS: mount FAILED");
+        ledRed.on();
+    }
+
+    // Boot complete — blink all 3 LEDs 3x
+    for (int i = 0; i < 3; i++) {
+        ledGreen.on(); ledBlue.on(); ledRed.on();
+        HAL_Delay(150);
+        ledGreen.off(); ledBlue.off(); ledRed.off();
+        HAL_Delay(150);
+    }
 
     uart.println("\r\n=== LittleFS Shell ===");
-
-    if (!fs.mount()) {
-        uart.println("ERR: filesystem mount failed!");
-        ledRed.on();
-        while (1) {}
-    }
-    uart.println("Filesystem OK. Type 'help'.");
+    uart.println("Type 'help' for commands.");
 
     char line[128];
     while (1) {
@@ -102,6 +113,6 @@ int main(void)
             uart.print("\r\n");
             parse_cmd(line);
         }
-        ledGreen.toggle(); // znak da je živ
+        ledGreen.toggle();
     }
 }

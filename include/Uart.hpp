@@ -51,7 +51,7 @@ public:
         print(buf);
     }
 
-    // Čita jednu liniju, vraća dužinu
+    // Read one line, returns number of characters read
     int readline(char *buf, int maxlen, uint32_t timeout_ms = 5000) {
         int i = 0;
         uint8_t c;
