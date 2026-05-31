@@ -4,7 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-// Ukljuci/iskljuci logovanje unutar taskova (0 = iskljuceno, nema utjecaja na RAM/Flash)
+// Turn on/off task logging (over UART) - can be useful for debugging scheduler issues, but adds overhead
 #define TASK_LOG_ENABLED 0
 
 #if TASK_LOG_ENABLED
