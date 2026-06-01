@@ -64,12 +64,12 @@ static void dhcpTask(void *)
                 tries = 0;
                 dhcp_stop(&s_netif);
                 ip4_addr_t ip, nm, gw;
-                IP4_ADDR(&ip, 192, 168, 1, 200);
+                IP4_ADDR(&ip, 192, 168, 2, 2);
                 IP4_ADDR(&nm, 255, 255, 255, 0);
-                IP4_ADDR(&gw, 192, 168, 1, 1);
+                IP4_ADDR(&gw, 192, 168, 2, 1);
                 netif_set_addr(&s_netif, &ip, &nm, &gw);
                 s_dhcp_up = true;
-                dbg.println("[net] DHCP timeout — using static 192.168.1.200");
+                dbg.println("[net] DHCP timeout — using static 192.168.2.2");
                 Network_PrintInfo();
             }
         }
