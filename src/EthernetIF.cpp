@@ -111,6 +111,11 @@ bool ETH_Init(void)
         return false;
     }
 
+    // Start ETH DMA transmit/receive
+    if (HAL_ETH_Start(&heth) != HAL_OK) {
+        return false;
+    }
+
     return true;
 }
 

@@ -2,6 +2,7 @@
 #include "Led.hpp"
 #include "Uart.hpp"
 #include "EthernetIF.hpp"
+#include "Network.hpp"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -97,6 +98,7 @@ int main(void)
     if (ETH_Init()) {
         dbg.println("[main] ETH init OK");
         dbg.printf("[main] link: %s\r\n", ETH_IsLinkUp() ? "UP" : "DOWN");
+        Network_Init();
     } else {
         dbg.println("[main] ETH init FAILED");
     }
