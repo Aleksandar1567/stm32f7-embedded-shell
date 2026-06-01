@@ -3,6 +3,7 @@
 #include "Uart.hpp"
 #include "EthernetIF.hpp"
 #include "Network.hpp"
+#include "TcpServer.hpp"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -99,6 +100,7 @@ int main(void)
         dbg.println("[main] ETH init OK");
         dbg.printf("[main] link: %s\r\n", ETH_IsLinkUp() ? "UP" : "DOWN");
         Network_Init();
+        TcpServer_Start();
     } else {
         dbg.println("[main] ETH init FAILED");
     }
